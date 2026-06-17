@@ -5,7 +5,7 @@ annoy-node
 
 Node bindings for [Annoy](https://github.com/spotify/annoy), an efficient Approximate Nearest Neighbors implementation written in C++.
 
-Version 4.0.0 requires Node 14 or Node 16 and does not yet work on 18.
+**Version 4.0.1** (@calldesk fork): upgraded `nan` to `^2.27.0` for Node 22+ compatibility. Ships prebuilts for `darwin-arm64` and `linux-x64` targeting Node 22 — no build tools required on install.
 
 Status: Tests pass, including one that loads 3 million vectors, but API coverage is not complete. Run on OS X and Linux with Node 8, 10, and 12. Not tried on Windows yet. Support for Node 6.3 and 4.6 ended at version 2.0.1 of this package.
 
@@ -30,21 +30,17 @@ There are a few minor differences in behavior:
 Installation
 ------------
 
-On Linux, if you don't already have Python 2.7 and g++ 4.8, you need to install them. Here's how you do it on Ubuntu:
-
-    (sudo) apt-get install python2.7
-    (sudo) apt-get install g++-4.8
-    npm config set python /path/to/executable/python2.7
-
-Then, symlink g++ somewhere it can be found:
-
-    ln -s /usr/bin/g++-4.8 /usr/local/bin/g++
-
-On OS X, they should already be there.
-
-Then:
-
     npm install annoy
+
+This package ships prebuilts for `darwin-arm64` and `linux-x64` (Node 22). No compiler or Python required on these platforms.
+
+To rebuild prebuilts after a Node version change:
+
+    # darwin-arm64 (run on Apple Silicon, Node 22)
+    npm run build:prebuilt
+
+    # linux-x64 (via Docker, matches Lambda environment)
+    npm run docker:build
 
 Usage
 -----
