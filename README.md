@@ -5,7 +5,7 @@ annoy-node
 
 Node bindings for [Annoy](https://github.com/spotify/annoy), an efficient Approximate Nearest Neighbors implementation written in C++.
 
-**Version 4.0.1** (@calldesk fork): upgraded `nan` to `^2.27.0` for Node 22+ compatibility. Ships prebuilts for `darwin-arm64` and `linux-x64` targeting Node 22 — no build tools required on install.
+**Version 5.0.0** (@calldesk fork): the binding is written against [N-API](https://nodejs.org/api/n-api.html) through [node-addon-api](https://github.com/nodejs/node-addon-api) (`NAPI_VERSION=8`) instead of NAN. One binary per platform loads on every Node.js release with N-API 8 (Node >= 16, tested on 22, 24 and 26); nothing is compiled on install where a prebuild exists. JS API, results and the on-disk index format are unchanged from 4.0.1 (see "Compatibility with 4.x" below).
 
 Status: Tests pass, including one that loads 3 million vectors, but API coverage is not complete. Run on OS X and Linux with Node 8, 10, and 12. Not tried on Windows yet. Support for Node 6.3 and 4.6 ended at version 2.0.1 of this package.
 
@@ -30,17 +30,32 @@ There are a few minor differences in behavior:
 Installation
 ------------
 
-    npm install annoy
+    npm install @calldesk/annoy-node
 
-This package ships prebuilts for `darwin-arm64` and `linux-x64` (Node 22). No compiler or Python required on these platforms.
+Prebuilds ship for:
 
-To rebuild prebuilts after a Node version change:
+| Platform | Built in | Notes |
+|---|---|---|
+| `linux-x64` | `public.ecr.aws/lambda/nodejs:22` (amd64) | glibc >= 2.14 |
+| `linux-arm64` | `public.ecr.aws/lambda/nodejs:22` (arm64) | glibc >= 2.17 |
+| `darwin-arm64`, `darwin-x64` | GitHub Actions macOS runners | built by `.github/workflows/prebuild.yml`; **not committed yet**: the 4.0.1 NAN darwin-arm64 prebuild was removed (it only loaded on Node 22), run the workflow and add its output before publishing 5.0.0 |
 
-    # darwin-arm64 (run on Apple Silicon, Node 22)
-    npm run build:prebuilt
+Elsewhere (Windows, musl/Alpine, other architectures) `npm install` falls back to compiling with node-gyp, which needs Python and a C++ toolchain.
 
-    # linux-x64 (via Docker, matches Lambda environment)
-    npm run docker:build
+### How prebuilds are built
+
+The Linux prebuilds are compiled inside the AWS Lambda `nodejs:22` image (Amazon Linux 2023, glibc 2.34) so they never need a newer glibc or libstdc++ than the Lambda runtime. Never commit a `.node` file compiled on a workstation: a recent distribution links against symbols the Lambda does not have (e.g. `sqrtf@GLIBC_2.43`).
+
+    npm run prebuild:linux      # linux-x64 + linux-arm64 via Docker buildx (arm64 under QEMU), then the symbol check
+    npm run check:prebuilds     # fails if a Linux prebuild needs > GLIBC_2.34 or > GLIBCXX_3.4.33
+
+Both Docker builds run the smoke tests inside the Lambda image. The darwin prebuilds (and all four, with tests on Node 22/24/26) are built by the `prebuild` GitHub Actions workflow: download its `prebuilds` artifact into `prebuilds/` before publishing.
+
+### Compatibility with 4.x
+
+- Same class, methods, argument coercion, defaults, return values and errors; `tests/wrong-input-test.js` passes against both the 4.0.1 NAN binary and 5.0.0.
+- Bit-identical results and `.annoy` files: `tests/equivalence-test.js` compares 5.0.0 with the 4.0.1 prebuild (`make equivalence-test REFERENCE_BINDING=... REFERENCE_NODE=<node 22>`). Indexes saved by either version load in the other.
+- Inputs that were undefined behaviour in 4.0.1 are now defined (`tests/undefined-behaviour-test.js`): asking for more neighbours than available returns only the real results (4.0.1 padded with garbage), querying an index without trees returns empty arrays (4.0.1 crashed), short vectors are zero-padded, and exceptions thrown while coercing arguments propagate to JS (4.0.1 aborted the process).
 
 Usage
 -----
@@ -79,10 +94,10 @@ Usage
 Development
 ------------
 
-    npm install -g node-gyp
-    node-gyp rebuild
+    npm ci
+    npx node-gyp rebuild    # local build in build/Release, preferred over prebuilds by node-gyp-build
 
-Run `eslint .` and `make prettier` before committing.
+Remove `build/` to test the prebuilds again. Run `eslint .` and `make prettier` before committing.
 
 Tests
 -----
@@ -92,7 +107,10 @@ Run tests with `make test`.
 You can also run tests individually:
 
 - This is a short baseline test: `node tests/smalltest.js`
-- This is a test that uses 70K 200-dimension vectors: `node tests/basictests.js`
+- This is a test that uses 70K 200-dimension vectors: `node tests/basictests.js basic-config.js`
+- API contract and wrong input, identical to 4.0.1: `node tests/wrong-input-test.js` (set `ANNOY_BINDING=<file.node>` to run it against another binary)
+- Native memory is released: `node --expose-gc tests/leak-test.js`
+- Equivalence with 4.0.1: `make equivalence-test REFERENCE_BINDING=<4.0.1 linux-x64 .node> REFERENCE_NODE=<node 22 binary>` (the 4.0.1 file is in git history at commit `dd317b0`)
 
 There is also a `big-test` target that is not a dependency of the `test` target. It loads about 3 million 300-dimension vectors. It takes about six minutes to run on good-for-2016 hardware. Before you can run it, you need to download [GoogleNews-vectors-negative300.bin](https://drive.google.com/file/d/0B7XkCwpI5KDYNlNUTTlSS21pQmM/edit?usp=sharing) to `tests/data`.
 
