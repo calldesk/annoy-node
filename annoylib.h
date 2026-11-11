@@ -824,6 +824,9 @@ class AnnoyIndexInterface {
   virtual void get_item(S item, T* v) const = 0;
   virtual void set_seed(int q) = 0;
   virtual bool on_disk_build(const char* filename, char** error=NULL) = 0;
+  // calldesk addition: bytes held by the node array (heap or mmap), so the
+  // Node binding can report them to V8 as external memory.
+  virtual size_t get_memory_size() const = 0;
 };
 
 template<typename S, typename T, typename Distance, typename Random>
@@ -865,6 +868,14 @@ public:
   }
   ~AnnoyIndex() {
     unload();
+  }
+
+  // calldesk addition. Mirrors what unload() releases: a loaded index maps
+  // _n_nodes nodes, an in-memory or on-disk build owns _nodes_size nodes.
+  size_t get_memory_size() const {
+    if (!_nodes) return 0;
+    S nodes = (_fd && !_on_disk) ? _n_nodes : _nodes_size;
+    return _s * (size_t)nodes;
   }
 
   int get_f() const {

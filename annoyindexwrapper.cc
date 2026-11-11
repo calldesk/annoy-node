@@ -19,6 +19,15 @@ double numberOr(const Napi::Value& value, double defaultValue) {
   return value.IsUndefined() ? defaultValue : value.ToNumber().DoubleValue();
 }
 
+// Converts the first `count` elements of a typed array to float, as
+// ToNumber then a float cast would for the same values in an Array.
+template <typename T>
+void copyTypedArray(const T* data, size_t count, std::vector<float>& vec) {
+  for (size_t i = 0; i < count; ++i) {
+    vec[i] = static_cast<float>(static_cast<double>(data[i]));
+  }
+}
+
 }  // namespace
 
 Napi::Object AnnoyIndexWrapper::Init(Napi::Env env, Napi::Object exports) {
@@ -85,12 +94,33 @@ std::vector<float> AnnoyIndexWrapper::newVector() const {
   return std::vector<float>(annoyDimensions > 0 ? annoyDimensions : 1, 0.0f);
 }
 
+void AnnoyIndexWrapper::syncExternalMemory(Napi::Env env) {
+  int64_t current = static_cast<int64_t>(annoyIndex->get_memory_size());
+  int64_t change = current - reportedExternalMemory;
+  if (change != 0) {
+    Napi::MemoryManagement::AdjustExternalMemory(env, change);
+    reportedExternalMemory = current;
+  }
+}
+
+void AnnoyIndexWrapper::Finalize(Napi::Env env) {
+  // Runs before the destructor frees the index. Raw call, status ignored: the
+  // environment may be tearing down, and a failure here must not abort.
+  if (reportedExternalMemory != 0) {
+    int64_t ignored;
+    napi_adjust_external_memory(env, -reportedExternalMemory, &ignored);
+    reportedExternalMemory = 0;
+  }
+}
+
 Napi::Value AnnoyIndexWrapper::AddItem(const Napi::CallbackInfo& info) {
   AnnoyIndexWrapper* obj = Receiver(info);
   int index = numberOr(info[0], 1);
   std::vector<float> vec = obj->newVector();
   if (obj->getFloatArrayParam(info, 1, vec)) {
     obj->annoyIndex->add_item(index, vec.data());
+    // The node array grows geometrically: this reports only on reallocation.
+    obj->syncExternalMemory(info.Env());
   }
   return info.Env().Undefined();
 }
@@ -99,6 +129,7 @@ Napi::Value AnnoyIndexWrapper::Build(const Napi::CallbackInfo& info) {
   AnnoyIndexWrapper* obj = Receiver(info);
   int numberOfTrees = numberOr(info[0], 1);
   obj->annoyIndex->build(numberOfTrees);
+  obj->syncExternalMemory(info.Env());
   return info.Env().Undefined();
 }
 
@@ -109,6 +140,8 @@ Napi::Value AnnoyIndexWrapper::Save(const Napi::CallbackInfo& info) {
     std::string path = info[0].ToString().Utf8Value();
     result = obj->annoyIndex->save(path.c_str());
   }
+  // save() unloads the heap nodes and maps the saved file instead.
+  obj->syncExternalMemory(info.Env());
   return Napi::Boolean::New(info.Env(), result);
 }
 
@@ -119,12 +152,14 @@ Napi::Value AnnoyIndexWrapper::Load(const Napi::CallbackInfo& info) {
     std::string path = info[0].ToString().Utf8Value();
     result = obj->annoyIndex->load(path.c_str());
   }
+  obj->syncExternalMemory(info.Env());
   return Napi::Boolean::New(info.Env(), result);
 }
 
 Napi::Value AnnoyIndexWrapper::Unload(const Napi::CallbackInfo& info) {
   AnnoyIndexWrapper* obj = Receiver(info);
   obj->annoyIndex->unload();
+  obj->syncExternalMemory(info.Env());
   return info.Env().Undefined();
 }
 
@@ -234,18 +269,62 @@ Napi::Value AnnoyIndexWrapper::nnResult(Napi::Env env, int numberOfNeighbors,
   return result;
 }
 
-// Returns true if info[paramIndex] is a JS Array, after copying its elements
-// (each coerced with ToNumber) into vec. Like 4.0.1, every element is coerced,
-// including those beyond the index dimensions; those are not stored (4.0.1
-// wrote them past the end of a stack buffer).
+// Returns true if info[paramIndex] is a JS Array or a numeric typed array,
+// after copying its elements into vec. Array elements are each coerced with
+// ToNumber; like 4.0.1, every element is coerced, including those beyond the
+// index dimensions, which are not stored (4.0.1 wrote them past the end of a
+// stack buffer). Typed arrays are read directly (new in 5.0.0).
 bool AnnoyIndexWrapper::getFloatArrayParam(const Napi::CallbackInfo& info, size_t paramIndex,
                                            std::vector<float>& vec) const {
   Napi::Value value = info[paramIndex];
+  const uint32_t dimensions = annoyDimensions > 0 ? static_cast<uint32_t>(annoyDimensions) : 0;
+
+  // 5.0.0: numeric typed arrays are read straight from their backing store,
+  // without one N-API call per component (4.0.1 ignored them). Same rules as
+  // for an Array: missing components stay 0, extra components are ignored.
+  if (value.IsTypedArray()) {
+    Napi::TypedArray typed = value.As<Napi::TypedArray>();
+    size_t length = typed.ElementLength();
+    size_t count = length < dimensions ? length : dimensions;
+    switch (typed.TypedArrayType()) {
+      case napi_float32_array: {
+        const float* data = value.As<Napi::Float32Array>().Data();
+        std::memcpy(vec.data(), data, count * sizeof(float));
+        return true;
+      }
+      case napi_float64_array:
+        copyTypedArray(value.As<Napi::Float64Array>().Data(), count, vec);
+        return true;
+      case napi_int8_array:
+        copyTypedArray(value.As<Napi::Int8Array>().Data(), count, vec);
+        return true;
+      case napi_uint8_array:
+      case napi_uint8_clamped_array:
+        copyTypedArray(static_cast<const uint8_t*>(typed.ArrayBuffer().Data()) + typed.ByteOffset(), count, vec);
+        return true;
+      case napi_int16_array:
+        copyTypedArray(value.As<Napi::Int16Array>().Data(), count, vec);
+        return true;
+      case napi_uint16_array:
+        copyTypedArray(value.As<Napi::Uint16Array>().Data(), count, vec);
+        return true;
+      case napi_int32_array:
+        copyTypedArray(value.As<Napi::Int32Array>().Data(), count, vec);
+        return true;
+      case napi_uint32_array:
+        copyTypedArray(value.As<Napi::Uint32Array>().Data(), count, vec);
+        return true;
+      default:
+        // BigInt64Array / BigUint64Array (and any future type): not numbers,
+        // treated as before, like any non-Array value.
+        return false;
+    }
+  }
+
   if (!value.IsArray()) {
     return false;
   }
   Napi::Array jsArray = value.As<Napi::Array>();
-  const uint32_t dimensions = annoyDimensions > 0 ? static_cast<uint32_t>(annoyDimensions) : 0;
   // Length is re-read on every iteration, as in 4.0.1.
   for (uint32_t i = 0; i < jsArray.Length(); i++) {
     float component = (float)jsArray.Get(i).ToNumber().DoubleValue();

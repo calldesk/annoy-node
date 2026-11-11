@@ -14,8 +14,10 @@ test: tests/data/text8-vector.json
 	node tests/smalltest-manhattan.js
 	node tests/basictests.js basic-config.js
 	node tests/wrong-input-test.js
+	node tests/typed-array-test.js
 	node tests/undefined-behaviour-test.js
 	node --expose-gc tests/leak-test.js
+	node tests/external-memory-test.js
 
 # Compares the binding under test with the 4.0.1 NAN prebuild (Node 22 only):
 #   make equivalence-test REFERENCE_BINDING=/path/to/4.0.1.node REFERENCE_NODE=/path/to/node22

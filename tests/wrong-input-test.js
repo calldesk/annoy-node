@@ -39,7 +39,6 @@ function makeSmallIndex() {
   var a = new Annoy(3, 'Euclidean');
   a.addItem(0, [1, 2, 3]);
   a.addItem(1, 'not an array'); // ignored
-  a.addItem(1, new Float32Array([1, 2, 3])); // ignored: not a JS Array
   a.addItem(1, ['4', '5', { valueOf: () => 6 }]); // elements coerced with ToNumber
   a.addItem('2', [7, 8, 9]); // index coerced with ToNumber
   a.addItem(3.9, [1, 1, 1]); // index truncated to 3
@@ -163,7 +162,6 @@ test('addItem, getItem and getNItems coercion', function(t) {
   t.equal(a.addItem(1, 'abc'), undefined, 'non-array vector ignored');
   t.equal(a.addItem(1), undefined, 'missing vector ignored');
   t.equal(a.addItem(1, { length: 3, 0: 1, 1: 2, 2: 3 }), undefined, 'array-like ignored');
-  t.equal(a.addItem(1, new Float64Array([1, 2, 3])), undefined, 'typed array ignored');
   t.equal(a.getNItems(), 1);
   a.addItem(1, ['4', '5', { valueOf: () => 6 }]);
   t.deepEqual(a.getItem(1), [4, 5, 6]);
@@ -215,7 +213,6 @@ test('getNNsByVector / getNNsByItem argument handling', function(t) {
   t.deepEqual(a.getNNsByVector([1, 2, 3], 2, 100), [0, 3], 'explicit search_k');
   t.equal(a.getNNsByVector('x', 2), undefined, 'non-array vector -> undefined');
   t.equal(a.getNNsByVector(), undefined, 'no vector -> undefined');
-  t.equal(a.getNNsByVector(new Float32Array([1, 2, 3]), 2), undefined, 'typed array -> undefined');
   t.deepEqual(a.getNNsByVector([1, 2, 3], 0, -1, true), { neighbors: [], distances: [] }, 'n = 0');
   t.deepEqual(a.getNNsByVector([1, 2, 3], 0), [], 'n = 0 without distances');
   t.deepEqual(a.getNNsByVector([1, 2, 3], -2, -1, true), { neighbors: [], distances: [] }, 'negative n');

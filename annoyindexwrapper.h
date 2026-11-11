@@ -19,6 +19,10 @@ class AnnoyIndexWrapper : public Napi::ObjectWrap<AnnoyIndexWrapper> {
   // `Annoy(...)` without `new` returns undefined, as in 4.0.1.
   static Napi::Value OnCalledAsFunction(const Napi::CallbackInfo& info);
 
+  // Returns the external memory still reported for this index to V8, before
+  // the index is freed with the wrapper.
+  void Finalize(Napi::Env env) override;
+
  private:
   // Prototype methods. They are static and look up their receiver themselves
   // (see Receiver) so that a call on a foreign `this` throws the same
@@ -44,8 +48,13 @@ class AnnoyIndexWrapper : public Napi::ObjectWrap<AnnoyIndexWrapper> {
                               const std::vector<int>& nnIndexes,
                               const std::vector<float>& distances);
   std::vector<float> newVector() const;
+  // Reports the change in the index memory (heap nodes or mmap'd file) to V8
+  // as external memory, so the GC weighs it and collects dropped indexes.
+  void syncExternalMemory(Napi::Env env);
 
   int annoyDimensions;
+  // Bytes currently reported to V8 through napi_adjust_external_memory.
+  int64_t reportedExternalMemory = 0;
   // Owned; freed (heap nodes or mmap'd file) when the JS object is collected
   // or the environment (main thread or worker) is torn down.
   std::unique_ptr<AnnoyIndexInterface<int, float>> annoyIndex;

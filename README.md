@@ -5,7 +5,7 @@ annoy-node
 
 Node bindings for [Annoy](https://github.com/spotify/annoy), an efficient Approximate Nearest Neighbors implementation written in C++.
 
-**Version 5.0.0** (@calldesk fork): the binding is written against [N-API](https://nodejs.org/api/n-api.html) through [node-addon-api](https://github.com/nodejs/node-addon-api) (`NAPI_VERSION=8`) instead of NAN. One binary per platform loads on every Node.js release with N-API 8 (Node >= 16, tested on 22, 24 and 26); nothing is compiled on install where a prebuild exists. JS API, results and the on-disk index format are unchanged from 4.0.1 (see "Compatibility with 4.x" below).
+**Version 5.0.0** (@calldesk fork): the binding is written against [N-API](https://nodejs.org/api/n-api.html) through [node-addon-api](https://github.com/nodejs/node-addon-api) (`NAPI_VERSION=8`) instead of NAN. One binary per platform loads on every Node.js release with N-API 8 (Node >= 16, tested on 22, 24 and 26); nothing is compiled on install where a prebuild exists. JS API, results and the on-disk index format are unchanged from 4.0.1 (see "Compatibility with 4.x" below), with two additions: numeric typed arrays are accepted as vectors, and index memory is reported to V8.
 
 Status: Tests pass, including one that loads 3 million vectors, but API coverage is not complete. Run on OS X and Linux with Node 8, 10, and 12. Not tried on Windows yet. Support for Node 6.3 and 4.6 ended at version 2.0.1 of this package.
 
@@ -55,6 +55,8 @@ Both Docker builds run the smoke tests inside the Lambda image. The darwin prebu
 
 - Same class, methods, argument coercion, defaults, return values and errors; `tests/wrong-input-test.js` passes against both the 4.0.1 NAN binary and 5.0.0.
 - Bit-identical results and `.annoy` files: `tests/equivalence-test.js` compares 5.0.0 with the 4.0.1 prebuild (`make equivalence-test REFERENCE_BINDING=... REFERENCE_NODE=<node 22>`). Indexes saved by either version load in the other.
+- **Behaviour change: typed arrays are accepted as vectors.** `addItem` and `getNNsByVector` take a `Float32Array` (copied directly, no per-component conversion) or any other numeric typed array, with the same results as the equivalent `Array` (`tests/typed-array-test.js`). 4.0.1 ignored them: `addItem` added nothing and `getNNsByVector` returned `undefined`. BigInt arrays are still ignored. On 5000 vectors of 200 dimensions, `addItem` with `Float32Array` takes 2.6 ms instead of 46.6 ms with arrays, and `getNNsByVector` saves ~8 µs per query.
+- **Index memory is reported to V8** (`napi_adjust_external_memory`): the heap nodes of a built index or the mapped file of a loaded one. The GC now collects indexes that are no longer referenced; with 4.0.1 a process loading a fresh index per request kept every dropped mapping until an unrelated GC (`tests/external-memory-test.js`: 1000 loads of a 4 MB index keep ~20 alive instead of ~360).
 - Inputs that were undefined behaviour in 4.0.1 are now defined (`tests/undefined-behaviour-test.js`): asking for more neighbours than available returns only the real results (4.0.1 padded with garbage), querying an index without trees returns empty arrays (4.0.1 crashed), short vectors are zero-padded, and exceptions thrown while coercing arguments propagate to JS (4.0.1 aborted the process).
 
 Usage
@@ -108,6 +110,8 @@ You can also run tests individually:
 
 - This is a short baseline test: `node tests/smalltest.js`
 - This is a test that uses 70K 200-dimension vectors: `node tests/basictests.js basic-config.js`
+- Typed array vectors (5.0.0): `node tests/typed-array-test.js`
+- External memory reporting (5.0.0): `node tests/external-memory-test.js`
 - API contract and wrong input, identical to 4.0.1: `node tests/wrong-input-test.js` (set `ANNOY_BINDING=<file.node>` to run it against another binary)
 - Native memory is released: `node --expose-gc tests/leak-test.js`
 - Equivalence with 4.0.1: `make equivalence-test REFERENCE_BINDING=<4.0.1 linux-x64 .node> REFERENCE_NODE=<node 22 binary>` (the 4.0.1 file is in git history at commit `dd317b0`)
