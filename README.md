@@ -5,7 +5,7 @@ annoy-node
 
 Node bindings for [Annoy](https://github.com/spotify/annoy), an efficient Approximate Nearest Neighbors implementation written in C++.
 
-**Version 5.0.0** (@calldesk fork): the binding is written against [N-API](https://nodejs.org/api/n-api.html) through [node-addon-api](https://github.com/nodejs/node-addon-api) (`NAPI_VERSION=8`) instead of NAN. One binary per platform loads on every Node.js release with N-API 8 (Node >= 16, tested on 22, 24 and 26); nothing is compiled on install where a prebuild exists. JS API, results and the on-disk index format are unchanged from 4.0.1 (see "Compatibility with 4.x" below), with two additions: numeric typed arrays are accepted as vectors, and index memory is reported to V8.
+**Version 5.0.0** (@calldesk fork): the binding is written against [N-API](https://nodejs.org/api/n-api.html) through [node-addon-api](https://github.com/nodejs/node-addon-api) (`NAPI_VERSION=10`, the latest stable Node-API) instead of NAN. One binary per platform loads on every Node.js release with Node-API 10 (Node >= 22.14; tested on 22, 24 and 26). The package only serves bot-api, which follows the AWS Lambda Node.js runtime, so it targets the current Node-API rather than older Node releases; nothing is compiled on install where a prebuild exists. JS API, results and the on-disk index format are unchanged from 4.0.1 (see "Compatibility with 4.x" below), with two additions: numeric typed arrays are accepted as vectors, and index memory is reported to V8.
 
 Status: Tests pass, including one that loads 3 million vectors, but API coverage is not complete. Run on OS X and Linux with Node 8, 10, and 12. Not tried on Windows yet. Support for Node 6.3 and 4.6 ended at version 2.0.1 of this package.
 

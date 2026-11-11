@@ -28,6 +28,15 @@ void copyTypedArray(const T* data, size_t count, std::vector<float>& vec) {
   }
 }
 
+// Node-API 10: an internalized string, which V8 uses as a property key without
+// converting it on every Set.
+Napi::Value propertyKey(Napi::Env env, const char* name) {
+  napi_value key;
+  NAPI_THROW_IF_FAILED(env, node_api_create_property_key_utf8(env, name, NAPI_AUTO_LENGTH, &key),
+                       Napi::Value());
+  return Napi::Value(env, key);
+}
+
 }  // namespace
 
 Napi::Object AnnoyIndexWrapper::Init(Napi::Env env, Napi::Object exports) {
@@ -264,8 +273,8 @@ Napi::Value AnnoyIndexWrapper::nnResult(Napi::Env env, int numberOfNeighbors,
     jsDistances.Set(static_cast<uint32_t>(i), Napi::Number::New(env, distances[i]));
   }
   Napi::Object result = Napi::Object::New(env);
-  result.Set("neighbors", jsNNIndexes);
-  result.Set("distances", jsDistances);
+  result.Set(propertyKey(env, "neighbors"), jsNNIndexes);
+  result.Set(propertyKey(env, "distances"), jsDistances);
   return result;
 }
 

@@ -6,9 +6,9 @@
       "include_dirs": [
         "<!(node -p \"require('node-addon-api').include_dir\")"
       ],
-      # NAPI_VERSION 8 is the lowest version providing napi_type_tag_object
-      # (used to reject foreign receivers). Supported by Node >= 12.22 / 14.17 / 16.
-      "defines": [ "NAPI_VERSION=8", "NAPI_CPP_EXCEPTIONS", "NODE_ADDON_API_DISABLE_DEPRECATED" ],
+      # Node-API 10, the latest stable version: this package only serves bot-api,
+      # which follows the AWS Lambda Node.js runtime (Node >= 22.14 / 23.6).
+      "defines": [ "NAPI_VERSION=10", "NAPI_CPP_EXCEPTIONS", "NODE_ADDON_API_DISABLE_DEPRECATED" ],
       "cflags!": [ "-fno-exceptions" ],
       "cflags_cc!": [ "-fno-exceptions" ],
       # No fused multiply-add: GCC contracts a*b+c into FMA on arm64 but not on
