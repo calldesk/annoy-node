@@ -18,6 +18,7 @@ test: tests/data/text8-vector.json
 	node tests/undefined-behaviour-test.js
 	node --expose-gc tests/leak-test.js
 	node tests/external-memory-test.js
+	npm run test:types
 
 # Compares the binding under test with the 4.0.1 NAN prebuild (Node 22 only):
 #   make equivalence-test REFERENCE_BINDING=/path/to/4.0.1.node REFERENCE_NODE=/path/to/node22

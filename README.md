@@ -110,6 +110,7 @@ You can also run tests individually:
 
 - This is a short baseline test: `node tests/smalltest.js`
 - This is a test that uses 70K 200-dimension vectors: `node tests/basictests.js basic-config.js`
+- TypeScript declarations (`index.d.ts`, 5.0.0): `npm run test:types` compiles `tests/types.ts` under `--strict`; misuse (unknown metric, non-numeric vector, wrong result type) must fail to type-check
 - Typed array vectors (5.0.0): `node tests/typed-array-test.js`
 - External memory reporting (5.0.0): `node tests/external-memory-test.js`
 - API contract and wrong input, identical to 4.0.1: `node tests/wrong-input-test.js` (set `ANNOY_BINDING=<file.node>` to run it against another binary)
