@@ -37,14 +37,14 @@
     "registry": "https://calldesk-974442180126.d.codeartifact.eu-west-1.amazonaws.com/npm/calldesk-repository/"
   },
   "dependencies": {
-    "bindings": "^1.2.1",
-    "level": "^6.0.0",
     "node-addon-api": "^8.9.2",
     "node-gyp-build": "^4.8.4"
   },
   "devDependencies": {
     "assert-no-error": "^1.0.0",
+    "bindings": "^1.2.1",
     "d3-queue": "^3.0.3",
+    "level": "^6.0.0",
     "level-sublevel": "^6.6.4",
     "ndjson": "^1.5.0",
     "node-worker-threads-pool": "^1.5.1",
