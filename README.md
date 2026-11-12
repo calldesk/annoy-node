@@ -38,7 +38,7 @@ Prebuilds ship for:
 |---|---|---|
 | `linux-x64` | `public.ecr.aws/lambda/nodejs:22` (amd64) | glibc >= 2.14 |
 | `linux-arm64` | `public.ecr.aws/lambda/nodejs:22` (arm64) | glibc >= 2.17 |
-| `darwin-arm64`, `darwin-x64` | GitHub Actions macOS runners | built by `.github/workflows/prebuild.yml`; **not committed yet**: the 4.0.1 NAN darwin-arm64 prebuild was removed (it only loaded on Node 22), run the workflow and add its output before publishing 5.0.0 |
+| `darwin-arm64`, `darwin-x64` | GitHub Actions macOS runners | built by `.github/workflows/prebuild.yml` (its `prebuilds` artifact) |
 
 Elsewhere (Windows, musl/Alpine, other architectures) `npm install` falls back to compiling with node-gyp, which needs Python and a C++ toolchain.
 
