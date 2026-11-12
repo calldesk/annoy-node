@@ -1,0 +1,135 @@
+# Builds the N-API prebuilds and tests them on every supported Node version.
+#
+# - linux-x64 / linux-arm64: built inside public.ecr.aws/lambda/nodejs:22
+#   (the bot-api Lambda runtime) via the Dockerfile, then checked against the
+#   Lambda glibc / libstdc++ symbol versions.
+# - darwin-arm64 / darwin-x64: built with prebuildify on macOS runners.
+#
+# The `prebuilds` artifact of a green run holds prebuilds/<platform>-<arch>/
+# for all four targets; commit it before publishing. Nothing is published here.
+#
+# DRAFT: written alongside the 5.0.0 port, never run yet.
+
+name: prebuild
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+# 4.0.1 NAN linux-x64 prebuild, used as the reference by tests/equivalence-test.js.
+env:
+  REFERENCE_COMMIT: dd317b0
+
+jobs:
+  build-linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            platform: linux/amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      # Builds in the Lambda image and runs the smoke tests there (see Dockerfile).
+      - name: Build prebuild in the Lambda nodejs:22 image
+        run: >
+          docker buildx build --platform ${{ matrix.platform }} --target prebuilds
+          --output type=local,dest=prebuilds .
+      - name: Check glibc / libstdc++ symbol versions
+        run: ./scripts/check-prebuild-symbols.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prebuild-linux-${{ matrix.arch }}
+          path: prebuilds/
+          if-no-files-found: error
+
+  build-darwin:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+          - arch: x64
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '11.0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --ignore-scripts
+      - run: npx prebuildify --napi --strip
+      - name: Check architecture
+        run: file prebuilds/darwin-${{ matrix.arch }}/*.node
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prebuild-darwin-${{ matrix.arch }}
+          path: prebuilds/
+          if-no-files-found: error
+
+  test:
+    needs: [build-linux, build-darwin]
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm, macos-15, macos-15-intel]
+        node: [22, 24, 26]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the equivalence test reads the 4.0.1 prebuild from history
+      # Node 22 first, only to keep its path for the equivalence test: the 4.0.1
+      # NAN reference only loads on Node 22 (ABI 127).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: echo "REFERENCE_NODE=$(command -v node)" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: node --version && npm ci --ignore-scripts
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: prebuild-*
+          path: prebuilds
+          merge-multiple: true
+      - name: Make sure the prebuild (not a local compile) is what gets loaded
+        run: |
+          rm -rf build
+          node -e "const p = require('node-gyp-build').path('.'); console.log(p); if (!p.includes('/prebuilds/')) process.exit(1)"
+      - run: make test
+      - name: Equivalence with the 4.0.1 NAN binding (linux-x64 only)
+        if: matrix.runner == 'ubuntu-24.04'
+        run: |
+          git show "$REFERENCE_COMMIT:prebuilds/linux-x64/@calldesk+annoy-node.node" > "$RUNNER_TEMP/annoy-4.0.1.node"
+          make equivalence-test REFERENCE_BINDING="$RUNNER_TEMP/annoy-4.0.1.node" REFERENCE_NODE="$REFERENCE_NODE"
+
+  collect:
+    needs: test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: prebuild-*
+          path: prebuilds
+          merge-multiple: true
+      - run: find prebuilds -type f -exec ls -l {} +
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prebuilds
+          path: prebuilds/

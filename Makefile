@@ -6,11 +6,30 @@ TESTDATADIR = tests/data
 build-wrapper:
 	node-gyp rebuild
 
+.PHONY: test big-test equivalence-test check-prebuilds
+
 test: tests/data/text8-vector.json
 	node tests/smalltest.js
 	node tests/worker-thread-test.js
 	node tests/smalltest-manhattan.js
 	node tests/basictests.js basic-config.js
+	node tests/wrong-input-test.js
+	node tests/typed-array-test.js
+	node tests/undefined-behaviour-test.js
+	node --expose-gc tests/leak-test.js
+	node tests/external-memory-test.js
+	npm run test:types
+
+# Compares the binding under test with the 4.0.1 NAN prebuild (Node 22 only):
+#   make equivalence-test REFERENCE_BINDING=/path/to/4.0.1.node REFERENCE_NODE=/path/to/node22
+REFERENCE_NODE ?= $(shell command -v node)
+equivalence-test:
+	@test -n "$(REFERENCE_BINDING)" || (echo "set REFERENCE_BINDING=<4.0.1 addon.node>" && exit 1)
+	ANNOY_REFERENCE_BINDING="$(REFERENCE_BINDING)" ANNOY_REFERENCE_NODE="$(REFERENCE_NODE)" node tests/equivalence-test.js
+
+# Fails if a prebuild needs a glibc / libstdc++ newer than the Lambda nodejs:22 image.
+check-prebuilds:
+	./scripts/check-prebuild-symbols.sh
 
 big-test: tests/data/GoogleNews-vectors-negative300.json
 	node tests/basictests.js very-big-config.js

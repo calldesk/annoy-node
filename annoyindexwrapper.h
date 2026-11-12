@@ -1,43 +1,63 @@
 #ifndef ANNOYINDEXWRAPPER_H
 #define ANNOYINDEXWRAPPER_H
 
-#include <nan.h>
+#include <napi.h>
+#include <memory>
 #include "annoylib.h"
 
-class AnnoyIndexWrapper : public Nan::ObjectWrap {
+// JS class `Annoy`: wraps one AnnoyIndex<int, float, Metric, Kiss64Random>.
+//
+// The JS-visible contract (argument coercion, defaults, return values, errors)
+// is the one of the 4.0.1 NAN wrapper; tests/wrong-input-test.js pins it.
+class AnnoyIndexWrapper : public Napi::ObjectWrap<AnnoyIndexWrapper> {
  public:
-  static void Init(v8::Local<v8::Object> exports);
-  int getDimensions();
-  AnnoyIndexInterface<int, float> *annoyIndex;
+  static Napi::Object Init(Napi::Env env, Napi::Object exports);
+
+  // Called by ObjectWrap for `new Annoy(dimensions, metric)`.
+  explicit AnnoyIndexWrapper(const Napi::CallbackInfo& info);
+
+  // `Annoy(...)` without `new` returns undefined, as in 4.0.1.
+  static Napi::Value OnCalledAsFunction(const Napi::CallbackInfo& info);
+
+  // Returns the external memory still reported for this index to V8, before
+  // the index is freed with the wrapper.
+  void Finalize(Napi::Env env) override;
 
  private:
-  explicit AnnoyIndexWrapper(int dimensions, const char *metricString);
-  virtual ~AnnoyIndexWrapper();
+  // Prototype methods. They are static and look up their receiver themselves
+  // (see Receiver) so that a call on a foreign `this` throws the same
+  // TypeError as the V8 signature check NAN relied on.
+  static Napi::Value AddItem(const Napi::CallbackInfo& info);
+  static Napi::Value Build(const Napi::CallbackInfo& info);
+  static Napi::Value Save(const Napi::CallbackInfo& info);
+  static Napi::Value Load(const Napi::CallbackInfo& info);
+  static Napi::Value Unload(const Napi::CallbackInfo& info);
+  static Napi::Value GetItem(const Napi::CallbackInfo& info);
+  static Napi::Value GetNNSByVector(const Napi::CallbackInfo& info);
+  static Napi::Value GetNNSByItem(const Napi::CallbackInfo& info);
+  static Napi::Value GetNItems(const Napi::CallbackInfo& info);
+  static Napi::Value GetDistance(const Napi::CallbackInfo& info);
 
-  static void New(const Nan::FunctionCallbackInfo<v8::Value>& info);
-  static void AddItem(const Nan::FunctionCallbackInfo<v8::Value>& info);
-  static void Build(const Nan::FunctionCallbackInfo<v8::Value>& info);
-  static void Save(const Nan::FunctionCallbackInfo<v8::Value>& info);
-  static void Load(const Nan::FunctionCallbackInfo<v8::Value>& info);
-  static void Unload(const Nan::FunctionCallbackInfo<v8::Value>& info);
-  static void GetItem(const Nan::FunctionCallbackInfo<v8::Value>& info);
-  static void GetNNSByVector(const Nan::FunctionCallbackInfo<v8::Value>& info);
-  static void GetNNSByItem(const Nan::FunctionCallbackInfo<v8::Value>& info);
-  static void GetNItems(const Nan::FunctionCallbackInfo<v8::Value>& info);
-  static void GetDistance(const Nan::FunctionCallbackInfo<v8::Value>& info);
-
-  static Nan::Persistent<v8::Function> constructor;
-  static bool getFloatArrayParam(const Nan::FunctionCallbackInfo<v8::Value>& info, 
-    int paramIndex, float *vec);
-  static void setNNReturnValues(
-    int numberOfNeighbors, bool includeDistances,
-    const std::vector<int>& nnIndexes, const std::vector<float>& distances,
-    const Nan::FunctionCallbackInfo<v8::Value>& info);
-  static void getSupplementaryGetNNsParams(
-    const Nan::FunctionCallbackInfo<v8::Value>& info,
-    int& numberOfNeighbors, int& searchK, bool& includeDistances);
+  static AnnoyIndexWrapper* Receiver(const Napi::CallbackInfo& info);
+  bool getFloatArrayParam(const Napi::CallbackInfo& info, size_t paramIndex,
+                          std::vector<float>& vec) const;
+  static void getSupplementaryGetNNsParams(const Napi::CallbackInfo& info,
+                                           int& numberOfNeighbors, int& searchK,
+                                           bool& includeDistances);
+  static Napi::Value nnResult(Napi::Env env, int numberOfNeighbors, bool includeDistances,
+                              const std::vector<int>& nnIndexes,
+                              const std::vector<float>& distances);
+  std::vector<float> newVector() const;
+  // Reports the change in the index memory (heap nodes or mmap'd file) to V8
+  // as external memory, so the GC weighs it and collects dropped indexes.
+  void syncExternalMemory(Napi::Env env);
 
   int annoyDimensions;
+  // Bytes currently reported to V8 through napi_adjust_external_memory.
+  int64_t reportedExternalMemory = 0;
+  // Owned; freed (heap nodes or mmap'd file) when the JS object is collected
+  // or the environment (main thread or worker) is torn down.
+  std::unique_ptr<AnnoyIndexInterface<int, float>> annoyIndex;
 };
 
 #endif

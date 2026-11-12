@@ -7,3 +7,4 @@ tests/data/*.db
 tools/w2v-to-json
 build
 .npmignore
+tools
